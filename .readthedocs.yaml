@@ -25,12 +25,12 @@ build:
     python: "3.9"
   jobs:
     pre_build:
-      - cd doc && python build-doc.py --skip-category ./
+      - cd doc && python build-doc.py --skip-category --skip-build ./
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
   builder: html
-  configuration: doc/templates/conf.py
+  configuration: doc/build-doc/src/conf.py
 
 # Optionally build your docs in additional formats such as PDF and ePub
 # formats:
