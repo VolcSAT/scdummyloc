@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<seiscomp>
+	<module name="scdummyloc" category="Processing" author="Swiss Seismological Service">
+		<description>
+			Dummy pick associator.
+		</description>
+		<configuration>
+			<parameter name="max_buffer_interval" type="double" default="10800" unit="seconds">
+				<description>
+					A buffer of 3 hours in seconds.
+				</description>
+			</parameter>
+			<parameter name="max_pick_delay" type="double" default="120" unit="seconds">
+				<description>
+					Maximal delay between picks in clusters.
+				</description>
+			</parameter>
+			<parameter name="max_pick_distance" type="double" default="50" unit="km">
+				<description>
+					Maximal distance between picked streams in clusters. Levels station, location and channel are supported. 
+				</description>
+			</parameter>
+			<parameter name="min_pick_distance" type="double" default="1" unit="km">
+				<description>
+					Minimal distance between picked streams in clusters.
+				</description>
+			</parameter>
+			<parameter name="default_phase_type" type="string" default="P">
+				<description>
+					Default phase type in origins.
+				</description>
+			</parameter>
+			<parameter name="min_released_clustered_picks" type="integer" default="2">
+				<description>
+					Minimal number of picks in clusters.
+				</description>
+			</parameter>
+			<parameter name="test" type="boolean" default="false">
+				<description>
+					If true nothing get sent (superseeds all other options).
+				</description>
+			</parameter>
+			<parameter name="release_todatabase" type="boolean" default="false">
+				<description>
+					If true origins go only to messaging system, not to database (no public ID). 
+				</description>
+			</parameter>
+			<parameter name="release_cluster" type="boolean" default="true">
+				<description>
+					If true clusters are released as preliminary origin. 
+				</description>
+			</parameter>
+			<parameter name="release_location" type="boolean" default="false">
+				<description>
+					If true cluster origin locations (not implemented) are released.
+				</description>
+			</parameter>
+			<parameter name="enable_loc_clust" type="boolean" default="true">
+				<description>
+					Enables clustering using all location codes of the same station as independent picks. Useful if station code is the same for distant instrument with different location code.
+				</description>
+			</parameter>
+			<parameter name="enable_cha_clust" type="boolean" default="false">
+				<description>
+					Enables clustering using all channel codes of the same station as independent picks. Useful if chanel level has coordinates (not in SED-ETHZ) and location code is the same for distant instrument.
+				</description>
+			</parameter>
+			<parameter name="enable_same_id_clust" type="boolean" default="false">
+				<description>
+					Enables clustering using picks of the same stream as independent picks. Useful if the same stream should contribute several time to origin.
+				</description>
+			</parameter>
+		</configuration>
+		<command-line>
+			<group name="Generic">
+				<optionReference>generic#help</optionReference>
+				<optionReference>generic#version</optionReference>
+				<optionReference>generic#config-file</optionReference>
+				<optionReference>generic#plugins</optionReference>
+				<optionReference>generic#daemon</optionReference>
+				<optionReference>generic#auto-shutdown</optionReference>
+				<optionReference>generic#shutdown-master-module</optionReference>
+				<optionReference>generic#shutdown-master-username</optionReference>
+			</group>
+
+			<group name="Verbosity">
+				<optionReference>verbosity#verbosity</optionReference>
+				<optionReference>verbosity#v</optionReference>
+				<optionReference>verbosity#quiet</optionReference>
+				<optionReference>verbosity#component</optionReference>
+				<optionReference>verbosity#syslog</optionReference>
+				<optionReference>verbosity#lockfile</optionReference>
+				<optionReference>verbosity#console</optionReference>
+				<optionReference>verbosity#debug</optionReference>
+				<optionReference>verbosity#log-file</optionReference>
+			</group>
+
+			<group name="Messaging">
+				<optionReference>messaging#user</optionReference>
+				<optionReference>messaging#host</optionReference>
+				<optionReference>messaging#timeout</optionReference>
+				<optionReference>messaging#primary-group</optionReference>
+				<optionReference>messaging#subscribe-group</optionReference>
+				<optionReference>messaging#encoding</optionReference>
+				<optionReference>messaging#start-stop-msg</optionReference>
+				<option long-flag="test">
+					<description>
+						Do not send any object.
+					</description>
+				</option>
+				<option long-flag="fake">
+					<description>
+						Do not write to database (do not create public id for sent object).
+					</description>
+				</option>
+			</group>  
+			
+			<group name="input">
+				<option long-flag="ep">
+					<description>
+						Name of input file with all picks for offline processing. Results are sent in XML to stdout.
+			            Read picks from file instead of messaging system. Use '-' to read from stdin. This option
+						implies --test.
+					</description>
+				</option>
+				<option long-flag="format" flag="f">
+					<description>
+			            Input format to use (xml [default], zxml (zipped xml), binary). Only relevant with --ep.
+					</description>
+				</option>
+				<option long-flag="output" flag="o">
+					<description>
+			            Write origins to specific XML file instead of stdout. Only relevant with --ep.
+					</description>
+				</option>
+				<option long-flag="playback">
+					<description>
+			            Flush origins immediately without delay.
+					</description>
+				</option>
+			</group>  
+		</command-line>
+	</module>
+</seiscomp>
