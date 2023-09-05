@@ -135,7 +135,7 @@
 				</option>
 				<option long-flag="playback">
 					<description>
-			            Flush origins immediately without delay.
+			            Release origins in real-time, similar to online processing, else release final origins only.
 					</description>
 				</option>
 			</group>  

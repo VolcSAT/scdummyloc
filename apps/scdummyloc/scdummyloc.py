@@ -10,6 +10,19 @@ from seiscomp.core import Time
 from numpy import average
 from seiscomp import io
 
+# TO DO:
+#
+# - FIX: seg fault
+#
+#  - ADD 
+#   - logging
+#   - locator
+#   - origin quality
+#   - option --dump-config 
+# 
+# - Improve: 
+#   - FASTER ACCESS TO COORDINATES: CACHE ALL STATIONS FROM INVENTORY?    
+#   - LISTEN TO AMPLITUDE AND USE SNR via Amplitude.pickID()
 
 
 class Cluster(object):
@@ -34,7 +47,6 @@ class Cluster(object):
 
     def get_weights(self):
         # weight should not reach 0
-        # TO DO LISTEN TO AMPLITUDE AND USE SNR via Amplitude.pickID()
         tmax = self.tmax()
         tnorm = float(self.tmax()-self.tmin())
         return [ float(tmax - pick.time().value())/tnorm+0.01 for pick in self.picks ] 
@@ -76,7 +88,7 @@ class PickListener(client.Application):
 
         self.min_released_clustered_picks = 2
         self.test = False                 # if True nothing get sent despite any other parameter
-        self.release_todatabase = False    # if True origin go only to messaging system, not to db (no public ID) 
+        self.release_todatabase = True    # if True origin go only to messaging system, not to db (no public ID) 
         self.release_cluster = True       # if True cluster is released as preliminary origin 
         self.release_location = False     # if True origin location is released
 
@@ -130,8 +142,6 @@ class PickListener(client.Application):
             sys.exit(-1)
 
     def createCommandLineDescription(self):
-        # TO DO :
-        #  --dump-config option
         self.commandline().addGroup("Input")
         self.commandline().addStringOption(
             "Input", "ep",
@@ -147,8 +157,8 @@ class PickListener(client.Application):
             "Only relevant with --input.")
         self.commandline().addOption(
             "Input", "playback",
-            "Flush origins immediately without delay. "
-            "Only relevant with --input.")
+            "Release origins in real-time, similar to online processing, else "
+            "release final origins only. Only relevant with --input.")
         self.commandline().addOption(
             "Messaging", "test",
             "Do not send any object.")
@@ -166,7 +176,7 @@ class PickListener(client.Application):
         try:
             self.max_buffer_interval = self.configGetDouble("max_buffer_interval")
         except Exception as e:
-            pass#print('Some configuration parameters could not be read: %s' % e)
+            pass
 
         try:
             self.max_pick_delay = self.configGetDouble("max_pick_delay")
@@ -227,9 +237,11 @@ class PickListener(client.Application):
 
             self.buffer_scan( )
 
-            if self.playback or self.inputFile is not None:
+            if self.playback or self.inputFile is None:
                 self.origins_release()
-
+            else:
+                print('Skipping real-time origin release because options playback=%s or ep=%s'%(self.playback,self.inputFile))
+            
         except Exception:
             traceback.print_exc()
             return
@@ -290,13 +302,13 @@ class PickListener(client.Application):
         try:
             start = staloccha.start()
         except Exception:
-            return False #continue
+            return False 
         try:
             end = staloccha.end()
             if not start <= pick.time().value() <= end:
-                return False #continue
+                return False 
         except Exception:
-            return True #pass  
+            return True   
 
         return True 
         
@@ -311,7 +323,7 @@ class PickListener(client.Application):
                                    ))
     
         try:   
-            # TO DO: CACHE ALL STATIONS ?            
+                     
             self.dbr = datamodel.DatabaseReader(self.database())
             self.inv = datamodel.Inventory()    
             self.dbr.loadNetworks(self.inv)
@@ -654,7 +666,7 @@ class PickListener(client.Application):
                 self.handlePick(pick)    
             
             if not self.playback :
-                # not cluster location released yet, release needed
+                # not cluster location released in real-time yet, release needed
                 self.origins_release()
 
             ar = io.XMLArchive()
