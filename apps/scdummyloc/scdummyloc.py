@@ -12,17 +12,17 @@ from seiscomp import io
 
 # TO DO:
 #
-# - FIX: seg fault
-#
-#  - ADD 
+# - ADD 
 #   - logging
-#   - locator
 #   - origin quality
 #   - option --dump-config 
 # 
 # - Improve: 
+#   - Use Amplitudes
+#   - Check cluster and/or origin location corresponds to correct pick and unpicked station distribution 
+#   - Check cluster and/or origin location corresponds to correct sorting of amplitude and/or time  
+#   - Use locators
 #   - FASTER ACCESS TO COORDINATES: CACHE ALL STATIONS FROM INVENTORY?    
-#   - LISTEN TO AMPLITUDE AND USE SNR via Amplitude.pickID()
 
 
 class Cluster(object):
@@ -71,9 +71,10 @@ class PickListener(client.Application):
         client.Application.__init__(self, argc, argv)
         self.setMessagingEnabled(True)
         self.setDatabaseEnabled(True, False)
-        self.setPrimaryMessagingGroup(Protocol.LISTENER_GROUP)
-        self.addMessagingSubscription("PICK")
+        #self.setPrimaryMessagingGroup(Protocol.LISTENER_GROUP)
         self.setPrimaryMessagingGroup("LOCATION")
+        self.addMessagingSubscription("PICK")
+        self.setLoadStationsEnabled(True)
         self.setLoggingToStdErr(True)
         self.pick_buffer = []
         self.clusters = []
@@ -100,7 +101,7 @@ class PickListener(client.Application):
         self.inputFormat = 'xml'
         self.outputFile = '/dev/stdout'
         self.playback = False
-        
+
 
     def validateParameters(self):
         try:
@@ -323,10 +324,12 @@ class PickListener(client.Application):
                                    ))
     
         try:   
-                     
-            self.dbr = datamodel.DatabaseReader(self.database())
-            self.inv = datamodel.Inventory()    
-            self.dbr.loadNetworks(self.inv)
+            # USE https://github.com/SeisComP/main/blob/b591e0de56fa85434b60ba306ec4df794713a175/apps/python/sh2proc.py#L161 INSTEAD     OR
+            # https://github.com/SeisComP/main/blob/b591e0de56fa85434b60ba306ec4df794713a175/apps/python/scevtstreams.py#L286 
+            
+            #self.dbr = datamodel.DatabaseReader(self.database())
+            self.inv = client.Inventory.Instance().inventory()    
+            #self.dbr.loadNetworks(self.inv)
             nnet = self.inv.networkCount()
             for inet in range(nnet):
                 net = self.inv.network(inet)
@@ -335,7 +338,7 @@ class PickListener(client.Application):
 
                 print("Network {:2} ".format(net.code()))                
 
-                self.dbr.load(net)
+                #self.dbr.load(net)
                 nsta = net.stationCount()
                 for ista in range(nsta):
                     sta = net.station(ista)
@@ -540,6 +543,8 @@ class PickListener(client.Application):
 
             if self.release_location :
                 #release origin with located cluster
+                # https://github.com/SeisComP/scdlpicker/blob/ad7354f18034a3ea8a4af65c7067a67cddb2aaa5/lib/relocation.py#L89
+                # https://github.com/swiss-seismological-service/sed-SeisComP-contributions/blob/6014f671a85ad4a69d3b3380e1abfcabf10c9d17/apps/screloc/main.cpp#L170C26-L170C41
                 self.send_origin( origin )
 
     def make_origin(self, lat, lon, dep, time, picks, weightpicks):
@@ -549,6 +554,8 @@ class PickListener(client.Application):
         ci = datamodel.CreationInfo()
         ci.setAgencyID(self.agencyID())
         ci.setCreationTime(Time.GMT())
+        ci.setAuthor(self.author())
+        ci.setModificationTime(Time.GMT())
         origin.setCreationInfo(ci)
 
         origin.setLongitude(datamodel.RealQuantity(lon))
@@ -593,20 +600,27 @@ class PickListener(client.Application):
             return True
 
         if self.release_todatabase:
-            msg = datamodel.NotifierMessage()
-            n = datamodel.Notifier("EventParameters",datamodel.OP_ADD, origin)
-            msg.attach(n)
+            if False:
+                msg = datamodel.NotifierMessage()
+                n = datamodel.Notifier("EventParameters",datamodel.OP_ADD, origin)
+                msg.attach(n)
+            else:
+                self.ep = datamodel.EventParameters()
+                datamodel.Notifier.Enable()
+                self.ep.add(origin)
+                msg = datamodel.Notifier.GetMessage()
+                datamodel.Notifier.Disable()
+            
         else:
             msg = datamodel.ArtificialOriginMessage(origin)
         
         if not self.test:
-            try:
-                self.connection().send(msg)
-            except Exception:
-                traceback.print_exc()
-                return
+            if self.connection().send(msg):
+                print("sent origin")# + origin.publicID()) #seiscomp.logging.info
+            else:
+                print("WARNING failed to send")# + origin.publicID()) #seiscomp.logging.info
         else:
-            print('TEST MODE, ORIGIN NOT SENT')
+            print('TEST MODE, ORIGIN NOT SENT')        
 
         return True
     
