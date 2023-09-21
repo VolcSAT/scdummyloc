@@ -9,21 +9,7 @@ from seiscomp.math import delazi_wgs84
 from seiscomp.core import Time
 from numpy import average
 from seiscomp import io
-
-# TO DO:
-#
-# - ADD 
-#   - logging
-#   - origin quality
-#   - option --dump-config 
-# 
-# - Improve: 
-#   - Use Amplitudes
-#   - Check cluster and/or origin location corresponds to correct pick and unpicked station distribution 
-#   - Check cluster and/or origin location corresponds to correct sorting of amplitude and/or time  
-#   - Use locators
-#   - FASTER ACCESS TO COORDINATES: CACHE ALL STATIONS FROM INVENTORY?    
-
+from seiscomp.logging import info, debug, warning, error
 
 class Cluster(object):
     
@@ -75,7 +61,6 @@ class PickListener(client.Application):
         self.setPrimaryMessagingGroup("LOCATION")
         self.addMessagingSubscription("PICK")
         self.setLoadStationsEnabled(True)
-        self.setLoggingToStdErr(True)
         self.pick_buffer = []
         self.clusters = []
 
@@ -123,6 +108,7 @@ class PickListener(client.Application):
                 self.inputFile = self.commandline().optionString("ep")
                 self.test = True
                 self.setMessagingEnabled(False)
+                self.setLoggingToStdErr(True)
             except RuntimeError:
                 pass
 
@@ -181,7 +167,7 @@ class PickListener(client.Application):
 
         try:
             self.max_pick_delay = self.configGetDouble("max_pick_delay")
-            print('max_pick_delay',self.max_pick_delay )
+            info('max_pick_delay: %d s' % self.max_pick_delay )
         except Exception as e:
             pass
         try:
@@ -190,7 +176,7 @@ class PickListener(client.Application):
             pass
         try:
             self.default_phase_type = self.configGetString("default_phase_type")
-            print('default_phase_type',self.default_phase_type )
+            info('default_phase_type: %s' % self.default_phase_type )
         except Exception as e:
             pass
 
@@ -204,7 +190,7 @@ class PickListener(client.Application):
             pass              
         try:
             self.release_todatabase = self.configGetBool("release_todatabase")
-            print('release_todatabase',self.release_todatabase )
+            info('release_todatabase: %s' % str(self.release_todatabase) )
         except Exception as e:
             pass 
         try:
@@ -241,7 +227,7 @@ class PickListener(client.Application):
             if self.playback or self.inputFile is None:
                 self.origins_release()
             else:
-                print('Skipping real-time origin release because options playback=%s or ep=%s'%(self.playback,self.inputFile))
+                info('Skipping real-time origin release because options playback=%s or ep=%s' % ( self.playback, self.inputFile ))
             
         except Exception:
             traceback.print_exc()
@@ -251,22 +237,22 @@ class PickListener(client.Application):
         # called if an updated object is received
         pick = datamodel.Pick.Cast(scobject)
         if pick:
-            print("received update for pick {}".format(pick.publicID()))
+            debug("received update for pick {}".format(pick.publicID()))
             self.handlePick(pick)
 
     def addObject(self, parentID, scobject):
         # called if a new object is received
         pick = datamodel.Pick.Cast(scobject)
         if pick:
-            print("received new pick {}".format(pick.publicID()))
+            debug("received new pick {}".format(pick.publicID()))
             self.handlePick(pick)
     
     def buffer_add(self, pick):
 
         if ( sta := self.pick2chan( pick ) ) is False :
             wfid = pick.waveformID()
-            print('WARNING: STATION %s.%s NOT IN INVENTORY'%(str(wfid.networkCode()),
-                                                             str(wfid.stationCode())))
+            error('STATION %s.%s NOT IN INVENTORY' % ( str(wfid.networkCode()),
+                                                         str(wfid.stationCode())))
             return
         
         pick.la = sta['la']
@@ -274,7 +260,7 @@ class PickListener(client.Application):
         pick.el = sta['el']
         self.pick_buffer += [ pick ]
         
-        print('min %s max %s len %d'%(self.buffer_min(),self.buffer_max(), self.buffer_len()))
+        debug('Buffer beginning: %s ending: %s lasting: %d s' % ( self.buffer_min(), self.buffer_max(), self.buffer_len() ))
 
         if float( self.buffer_max() - self.buffer_min() )  > self.max_buffer_interval :
             to_pop = []
@@ -283,11 +269,11 @@ class PickListener(client.Application):
                     to_pop += [ pick ]
 
             for pick in to_pop:
-                print("removed: {}".format(pick.publicID()))
+                debug("removed: {}".format(pick.publicID()))
                 self.pick_buffer.remove(pick)
         
-        print('in buffer for {}:'.format(pick.time().value(),))
-        print('min %s max %s len %d'%(self.buffer_min(),self.buffer_max(), self.buffer_len()))
+        debug('in buffer for {}:'.format(pick.time().value(),))
+        debug('Buffer beginning: %s ending: %s lasting: %d s' % ( self.buffer_min(), self.buffer_max(), self.buffer_len() ))
         
         to_pop = []
         for c in self.clusters:
@@ -295,7 +281,7 @@ class PickListener(client.Application):
                 # OUTDATED CLUSTER (endtime<buffer starttime)
                 to_pop += [c]
         for c in to_pop:
-            print("removed: cluster ending on {}".format(c.tmax()))
+            debug("removed: cluster ending on {}".format(c.tmax()))
             self.clusters.remove(c)
     
     def is_staloccha_availableattime(self, staloccha, pick):
@@ -316,12 +302,11 @@ class PickListener(client.Application):
     def pick2chan(self, pick):
         wfid = pick.waveformID()
 
-        print('%s.%s.%s.%s at %s'%( str(wfid.networkCode()),
-                                    str(wfid.stationCode()),
-                                    str(wfid.locationCode()),
-                                    str(wfid.channelCode()),
-                                    str(pick.time().value()) 
-                                   ))
+        debug('%s.%s.%s.%s at %s' % ( str(wfid.networkCode()),
+                                      str(wfid.stationCode()),
+                                      str(wfid.locationCode()),
+                                      str(wfid.channelCode()),
+                                      str(pick.time().value()) ))
     
         try:   
             # USE https://github.com/SeisComP/main/blob/b591e0de56fa85434b60ba306ec4df794713a175/apps/python/sh2proc.py#L161 INSTEAD     OR
@@ -336,7 +321,7 @@ class PickListener(client.Application):
                 if str(net.code()) != str(wfid.networkCode()):
                     continue
 
-                print("Network {:2} ".format(net.code()))                
+                debug("Network {:2} ".format(net.code()))                
 
                 #self.dbr.load(net)
                 nsta = net.stationCount()
@@ -348,7 +333,7 @@ class PickListener(client.Application):
                     if not self.is_staloccha_availableattime( sta, pick ):   
                         continue         
                     
-                    print("Station {:5} ".format(sta.code()))
+                    debug("Station {:5} ".format(sta.code()))
 
                     #self.dbr.load(sta)
                     nloc = sta.sensorLocationCount()*self.enable_loc_clust
@@ -360,7 +345,7 @@ class PickListener(client.Application):
                         if not self.is_staloccha_availableattime( loc, pick ):   
                             continue                           
                         
-                        print("Location '{:2}' ".format(loc.code()))
+                        debug("Location '{:2}' ".format(loc.code()))
 
                         #self.dbr.load(loc)
                         ncha = loc.streamCount()*self.enable_cha_clust 
@@ -372,30 +357,30 @@ class PickListener(client.Application):
                             if not self.is_staloccha_availableattime( cha, pick ):   
                                 continue                   
 
-                            print("Channel {:3}".format(cha.code()))            
+                            debug("Channel {:3}".format(cha.code()))            
                                
                             if "latitude" in dir(cha) and "longitude" in dir(cha)  and "elevation" in dir(cha):                             
-                                print("Channel: {:9.4f} {:9.4f} {:9.4f}".format(cha.latitude(), 
+                                info("Channel: {:9.4f} {:9.4f} {:9.4f}".format( cha.latitude(), 
                                                                                 cha.longitude(), 
-                                                                                cha.elevation()))
+                                                                                cha.elevation() ))
                                 
                                 return {'la':cha.latitude(),
                                         'lo':cha.longitude(),
                                          'el':cha.elevation()}
                                
                         if "latitude" in dir(loc) and "longitude" in dir(loc) and "elevation" in dir(loc):                             
-                            print("Location: {:9.4f} {:9.4f} {:9.4f}".format(loc.latitude(), 
+                            info("Location: {:9.4f} {:9.4f} {:9.4f}".format( loc.latitude(), 
                                                                              loc.longitude(), 
-                                                                             loc.elevation()))
+                                                                             loc.elevation() ))
                             
                             return {'la':loc.latitude(),
                                     'lo':loc.longitude(),
                                     'el':loc.elevation()}
                     
                     if "latitude" in dir(sta) and "longitude" in dir(sta) and "elevation" in dir(sta):                             
-                        print("Station: {:9.4f} {:9.4f} {:9.4f}".format(sta.latitude(), 
+                        info("Station: {:9.4f} {:9.4f} {:9.4f}".format( sta.latitude(), 
                                                                         sta.longitude(), 
-                                                                        sta.elevation()))
+                                                                        sta.elevation() ))
                         
                         return {'la':sta.latitude(),
                                 'lo':sta.longitude(),
@@ -403,6 +388,7 @@ class PickListener(client.Application):
 
         except Exception:
             traceback.print_exc()
+            error("Cannot access station inventory")
             sys.exit(-1)
         
         return False
@@ -452,7 +438,7 @@ class PickListener(client.Application):
                 pick2clust = [ c for c,clust in enumerate(self.clusters) if pick2 in clust.picks ]
 
                 if len(pick2clust)>1 or len(pick1clust)>1:
-                    print('WARNING PICKS DUPLICATED IN CLUSTERS')
+                    error('PICKS DUPLICATED IN CLUSTERS')
                 if len(pick2clust) and len(pick1clust):
                     continue # both already clustered
 
@@ -478,38 +464,38 @@ class PickListener(client.Application):
                 if len(pick1clust) and not len(pick2clust):
                     # check if mseedid are already in clust
                     if not self.enable_same_id_clust and mseedid2 in [ self.mseedid(p) for p in self.clusters[pick1clust[0]].picks ]:
-                        print(mseedid2, 'already in cluster', pick1clust[0] )
+                        debug('{} already in cluster {}'.format( mseedid2, pick1clust[0] ))
                         continue
 
-                    print('Upgrading cluster {} '.format(pick1clust[0]))
-                    print('With', mseedid2)
+                    info('Upgrading cluster {} '.format(pick1clust[0]))
+                    info('With {}'.format(mseedid2))
                     self.clusters[pick1clust[0]].picks += [ pick2 ]
                     self.release += [ pick1clust[0] ]
 
                 elif len(pick2clust) and not len(pick1clust):
                     # check if mseedid are already in clust
                     if not self.enable_same_id_clust and mseedid1 in [ self.mseedid(p) for p in self.clusters[pick2clust[0]].picks ]:
-                        print(mseedid1, 'already in cluster', pick2clust[0] )
+                        debug('{} already in cluster {}'.format( mseedid1, pick2clust[0] ))
                         continue
 
-                    print('Upgrading cluster {} '.format(pick2clust[0]))
-                    print('With', mseedid1)
+                    info('Upgrading cluster {} '.format(pick2clust[0]))
+                    info('With {}'.format(mseedid1))
                     self.clusters[pick2clust[0]].picks += [ pick1 ]
                     self.release += [ pick2clust[0] ]
 
                 else:
-                    print('New cluster')
-                    print('With both', mseedid1, 'and', mseedid2)
+                    info('New cluster')
+                    info('With both {} and {}'.format( mseedid1, mseedid2 ))
                     self.clusters += [ Cluster( pick1, pick2 ) ]
                     self.release += [ len(self.clusters)-1 ]
 
-                print(mseedid1, 'versus', mseedid2)
-                print(dt,'=',str(pick1.time().value()),"-",str(pick2.time().value()))
-                print(delta ,'= delazi_wgs84(',elat, elon, slat, slon,")")
+                debug('{} versus {}'.format( mseedid1, mseedid2 ))
+                debug('%.2f = %s - %s' % ( dt,str(pick1.time().value()), str(pick2.time().value()) ))
+                debug('%.3f = delazi_wgs84( %.4f, %.4f, %.4f, %.4f )' % ( delta, elat, elon, slat, slon ))
 
         self.release = list(set(self.release))
-        print('.'.join(['Cluster #%d: %d picks'%(i,c.len()) for i,c in enumerate(self.clusters)]))
-        print('Cluster(s) to release: #%s'%', #'.join(['%d'%i for i in self.release]))
+        info('. '.join([ 'Cluster #%d with %d picks' % ( i, c.len() ) for i,c in enumerate(self.clusters) ]))
+        info('Cluster(s) to release: %s' % (', '.join([ '#%d' % i for i in self.release ])))
 
     def origins_release(self):        
 
@@ -531,11 +517,14 @@ class PickListener(client.Application):
             origin.setMethodID('weighted average')
             origin.setType(datamodel.CENTROID)
 
-            print('Origin (weighted average centroid):')
-            print('  ',latlonel[0],'°N', latlonel[1],'°E', latlonel[2],'km bsl at', cluster.time_min())
-            print('   picks mseedids:', cluster.get_ids())
-            print('   picks weigths:', cluster.get_weights())
-            print('   picks (lat,lon,el):', cluster.get_coordinates())
+            info('Origin (weighted average centroid):')
+            info('  %.4f°N %.4f°E %.3f km bsl at %s' % ( latlonel[0], 
+                                                         latlonel[1], 
+                                                         latlonel[2], 
+                                                         str(cluster.time_min()) ))
+            info('   picks mseedids: %s' % ( str(cluster.get_ids()) ))
+            info('   picks weigths: %s' % ( str(cluster.get_weights()) ))
+            info('   picks (lat,lon,el): %s' % ( str(cluster.get_coordinates()) ))
 
             if self.release_cluster :
                 #release origin with cluster release
@@ -574,13 +563,13 @@ class PickListener(client.Application):
                 arr.setTimeUsed(True)
                 arr.setWeight(weightpicks[p])
                 origin.add(arr)
-                print(pick.publicID(), "added")
+                debug("{} added".format(pick.publicID()))
         
         oq = datamodel.OriginQuality()
         oq.setAssociatedPhaseCount(len(picks))
         oq.setUsedPhaseCount(len(picks))
-        #oq.setAssociatedStationCount()
-        #oq.setUsedStationCount()
+        oq.setAssociatedStationCount(p+1)
+        oq.setUsedStationCount(p+1)
         #oq.setAzimuthalGap()
         #oq.setSecondaryAzimuthalGap()
         #oq.setMaximumDistance()
@@ -616,11 +605,11 @@ class PickListener(client.Application):
         
         if not self.test:
             if self.connection().send(msg):
-                print("sent origin")# + origin.publicID()) #seiscomp.logging.info
+                info("sent origin")# + origin.publicID()) #seiscomp.logging.info
             else:
-                print("WARNING failed to send")# + origin.publicID()) #seiscomp.logging.info
+                error("failed to send")# + origin.publicID()) #seiscomp.logging.info
         else:
-            print('TEST MODE, ORIGIN NOT SENT')        
+            info('TEST MODE, ORIGIN NOT SENT')        
 
         return True
     
@@ -690,7 +679,7 @@ class PickListener(client.Application):
             ar.close()
             return True
             
-        print("Hi! The pick listener is now running.")
+        info("Hi! The pick listener is now running.")
         return client.Application.run(self)
 
 
