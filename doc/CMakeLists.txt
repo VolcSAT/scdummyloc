@@ -2,7 +2,7 @@ IF (SC_DOC_GENERATE)
     SET(DOC_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/build-doc)
     SET(CONF_FILE "${CMAKE_CURRENT_SOURCE_DIR}/templates/conf.py")
 
-    ADD_CUSTOM_TARGET(eewdoc ALL
+    ADD_CUSTOM_TARGET(dummydoc ALL
                     COMMAND ${PYTHON_EXECUTABLE} ./build-doc.py --skip-category --version "vX.Y.Z" . ${DOC_BUILD_DIR}
                     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
