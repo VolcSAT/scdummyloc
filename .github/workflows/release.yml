@@ -1,0 +1,40 @@
+name: Build & Release scdummyloc
+
+on:
+  push:
+    tags:
+      - "v*"   # Runs only when you push a tag like v1.0.0
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare package directory
+        run: |
+          mkdir -p package/bin
+          mkdir -p package/etc/init
+          mkdir -p package/etc/descriptions
+          mkdir -p package/etc/defaults
+
+          cp apps/scdummyloc/scdummyloc.py package/bin/scdummyloc
+          chmod +x package/bin/scdummyloc
+
+          cp apps/scdummyloc/initd.py package/etc/init/scdummyloc.py
+          cp apps/scdummyloc/description/scdummyloc.xml package/etc/descriptions/
+          cp apps/scdummyloc/config/scdummyloc.cfg package/etc/defaults/
+
+      - name: Create tar.gz archive
+        run: |
+          tar -czf scdummyloc-${GITHUB_REF_NAME}.tar.gz -C package .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: scdummyloc-${{ github.ref_name }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
